@@ -1,0 +1,10 @@
+version: 1.0.0
+license: "MIT"
+description: weather
+url: https://github.com/NingZiXi/weather
+files:
+  exclude:
+  - .git
+dependencies:
+  idf:
+    version: ">=5.3.1"

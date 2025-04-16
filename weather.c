@@ -6,15 +6,18 @@
 #include "lwip/dns.h"
 #include "esp_crt_bundle.h"
 #include <ctype.h>
-
+#include "zlib.h"
 static const char *TAG = "WEATHER";
 
 // 定义安全释放宏
 #define SAFE_FREE(ptr) do { if (ptr) { free(ptr); ptr = NULL; } } while(0)
 
 // 内部使用的缓冲区
-static char weather_buffer[2048];
+static char weather_buffer[2048];   
 static size_t weather_len = 0;
+
+// 用于存储 Content-Encoding 头部值
+static char content_encoding_value[32] = {0}; 
 
 // URL编码函数
 static void url_encode(char *dest, const char *src, size_t max_len) {
@@ -36,6 +39,14 @@ static void url_encode(char *dest, const char *src, size_t max_len) {
 // HTTP事件处理器
 static esp_err_t weather_http_handler(esp_http_client_event_t *evt) {
     switch(evt->event_id) {
+        case HTTP_EVENT_ON_HEADER:
+            ESP_LOGI(TAG, "HTTP_EVENT_ON_HEADER, key=%s, value=%s", evt->header_key, evt->header_value);
+            // 存储Content-Encoding头
+            if (strcasecmp(evt->header_key, "Content-Encoding") == 0) {
+                strlcpy(content_encoding_value, evt->header_value, sizeof(content_encoding_value));
+            }
+            break;
+
         case HTTP_EVENT_ON_DATA:
             if (weather_len + evt->data_len >= sizeof(weather_buffer)) {
                 ESP_LOGE(TAG, "Buffer overflow");
@@ -50,6 +61,48 @@ static esp_err_t weather_http_handler(esp_http_client_event_t *evt) {
     return ESP_OK;
 }
 
+// 解压 gzip 数据
+static char* decompress_gzip_data(const char *compressed_data, int compressed_len) {
+    z_stream strm;
+    strm.zalloc = Z_NULL;
+    strm.zfree = Z_NULL;
+    strm.opaque = Z_NULL;
+    strm.avail_in = compressed_len;
+    strm.next_in = (Bytef *)compressed_data;
+
+    // 分配一个足够大的缓冲区来存储解压后的数据
+    char *uncompressed_data = malloc(compressed_len * 2); // 假设解压后数据不会超过两倍
+    if (uncompressed_data == NULL) {
+        ESP_LOGE(TAG, "Failed to allocate memory for uncompressed data");
+        return NULL;
+    }
+
+    strm.avail_out = compressed_len * 2;
+    strm.next_out = (Bytef *)uncompressed_data;
+
+    int ret = inflateInit2(&strm, 16 + MAX_WBITS);
+    if (ret != Z_OK) {
+        ESP_LOGE(TAG, "inflateInit2 failed: %d", ret);
+        free(uncompressed_data);
+        return NULL;
+    }
+
+    ret = inflate(&strm, Z_NO_FLUSH);
+    if (ret != Z_STREAM_END) {
+        ESP_LOGE(TAG, "inflate failed: %d", ret);
+        inflateEnd(&strm);
+        free(uncompressed_data);
+        return NULL;
+    }
+
+    inflateEnd(&strm);
+
+    // 确保解压后的数据以 null 结尾
+    uncompressed_data[strm.total_out] = '\0';
+
+    return uncompressed_data;
+}
+
 // 执行HTTP请求
 static char* weather_http_request(const char *url) {
     esp_http_client_config_t config = {
@@ -57,11 +110,12 @@ static char* weather_http_request(const char *url) {
         .method = HTTP_METHOD_GET,
         .event_handler = weather_http_handler,
         .timeout_ms = 60000,
-        .buffer_size = 4096,
+        .buffer_size = 3072,
         .crt_bundle_attach = esp_crt_bundle_attach,
     };
 
     esp_http_client_handle_t client = esp_http_client_init(&config);
+
     
     weather_len = 0;
     memset(weather_buffer, 0, sizeof(weather_buffer));
@@ -77,6 +131,19 @@ static char* weather_http_request(const char *url) {
         weather_len = sizeof(weather_buffer) - 1;
     }
     weather_buffer[weather_len] = '\0';
+
+    // 检查是否是 gzip 压缩数据
+    if (content_encoding_value[0] && strcmp(content_encoding_value, "gzip") == 0) {
+        ESP_LOGI(TAG, "Data is gzip compressed, decompressing...");
+        char *uncompressed_data = decompress_gzip_data(weather_buffer, weather_len);
+        if (uncompressed_data) {
+            esp_http_client_cleanup(client);
+            return uncompressed_data;
+        } else {
+            esp_http_client_cleanup(client);
+            return NULL;
+        }
+    }
 
     esp_http_client_cleanup(client);
     return strdup(weather_buffer);
@@ -380,11 +447,12 @@ void weather_print_info(const weather_info_t *info) {
     // 预格式化带单位的数据
     char temp_str[16] = "", feels_str[16] = "", humidity_str[16] = "";
     char precip_str[16] = "", pressure_str[16] = "", vis_str[16] = "";
-    char cloud_str[16] = "", dew_str[16] = "";
+    char cloud_str[16] = "", dew_str[16] = "", wspeed_str[16] = "";
     
     if (info->temperature != 0.0f) snprintf(temp_str, sizeof(temp_str), "%.1f℃", info->temperature);
     if (info->feels_like != 0.0f) snprintf(feels_str, sizeof(feels_str), "%.1f℃", info->feels_like);
     if (info->humidity != 0.0f) snprintf(humidity_str, sizeof(humidity_str), "%.1f%%", info->humidity);
+    if (info->wind_speed != 0.0f) snprintf(wspeed_str, sizeof(wspeed_str), "%.1fkm/h", info->wind_speed);
     if (info->precip != 0.0f) snprintf(precip_str, sizeof(precip_str), "%.1fmm", info->precip);
     if (info->pressure != 0.0f) snprintf(pressure_str, sizeof(pressure_str), "%.1fhPa", info->pressure);
     if (info->visibility != 0.0f) snprintf(vis_str, sizeof(vis_str), "%.1fkm", info->visibility);
@@ -396,14 +464,14 @@ void weather_print_info(const weather_info_t *info) {
     if (info->temperature != 0.0f) printf("│ 🌡️  温度: %-30s │\n", temp_str);
     if (info->feels_like != 0.0f) printf("│ 🤒 体感: %-30s │\n", feels_str);
     if (info->humidity != 0.0f) printf("│ 💧 湿度: %-28s │\n", humidity_str);
-    if (info->wind_dir) printf("│ 🍃 风向: %-30s │\n", info->wind_dir);
-    if (info->wind_scale) printf("│ 💨 风力: %-30s │\n", info->wind_scale);
-    if (info->wind_speed != 0.0f) printf("│ 🌬️ 风速: %-28.1fkm/h │\n", info->wind_speed);
-    if (info->precip != 0.0f) printf("│ 🌧️ 降水: %-28s │\n", precip_str);
-    if (info->pressure != 0.0f) printf("│ ⏲️ 气压: %-28s │\n", pressure_str);
-    if (info->visibility != 0.0f) printf("│ 👁️ 能见度: %-25s │\n", vis_str);
-    if (info->cloud != 0.0f) printf("│ ☁️ 云量: %-28s │\n", cloud_str);
-    if (info->dew_point != 0.0f) printf("│ 💦 露点: %-28s │\n", dew_str);
+    if (info->wind_dir) printf("│ 🍃 风向: %-31s │\n", info->wind_dir);
+    if (info->wind_scale) printf("│ 💨 风力: %-28s │\n", info->wind_scale);
+    if (info->wind_speed != 0.0f) printf("│ 🌬️  风速: %-28s │\n", wspeed_str);
+    if (info->precip != 0.0f) printf("│ 🌧️  降水: %-28s │\n", precip_str);
+    if (info->pressure != 0.0f) printf("│ ⏲️  气压: %-28s │\n", pressure_str);
+    if (info->visibility != 0.0f) printf("│ 👁️  能见度: %-26s │\n", vis_str);
+    if (info->cloud != 0.0f) printf("│ ☁️  云量: %-28s │\n", cloud_str);
+    if (info->dew_point != 0.0f) printf("│ 💦 露点: %-30s │\n", dew_str);
     printf("└───────────────────────────────────────┘\n");
     
     if (info->update_time) printf("\n🕒 更新时间: %s\n", info->update_time);

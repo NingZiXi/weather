@@ -8,4 +8,5 @@ idf_component_register(SRCS "weather.c"
                     esp_netif
                     esp_event
                     lwip
+                    zlib
                     )

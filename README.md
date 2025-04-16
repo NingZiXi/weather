@@ -72,7 +72,7 @@
 要将组件添加到项目中请在IDF终端执行下方命令:
 
 ```bash
-idf.py add-dependency "ningzixi/weather^1.0.0"
+idf.py add-dependency "ningzixi/weather^1.1.0"
 ```
 
 或者直接克隆本仓库到项目`components`目录下:

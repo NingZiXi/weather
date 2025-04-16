@@ -72,7 +72,7 @@ The above data is based on free services. HeFeng Weather is recommended here. Al
 To add the component to your project, execute the following command in the IDF terminal:
 
 ```bash
-idf.py add-dependency "ningzixi/weather^1.0.0"
+idf.py add-dependency "ningzixi/weather^1.1.0"
 ```
 
 Or clone this repository directly into the `components` directory of your project:

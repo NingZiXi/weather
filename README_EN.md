@@ -111,7 +111,7 @@ void app_main() {
     }
 }
 ```
-For more API interfaces, please refer to [weather.h](include\weather.h).
+For more API interfaces, please refer to [weather.h](include/weather.h).
 
 #### Serial Output Example:
 ``` 

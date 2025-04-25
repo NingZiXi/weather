@@ -114,7 +114,7 @@ void app_main() {
     }
 }
 ```
-更多API接口请查看[weather.h](include\weather.h)
+更多API接口请查看[weather.h](include/weather.h)
 
 #### 串口输出如下
 ``` 

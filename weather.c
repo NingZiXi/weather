@@ -354,6 +354,7 @@ weather_info_t* weather_get(weather_config_t *config) {
     char url[256];
     weather_info_t *weather_info = NULL;
     char encoded_city[64] = {0};
+    char *response = NULL;
     switch(config->type) {
         case WEATHER_GAODE:
             if(!config->api_key){
@@ -363,7 +364,11 @@ weather_info_t* weather_get(weather_config_t *config) {
             url_encode(encoded_city, location_info->city, sizeof(encoded_city));
             snprintf(url, sizeof(url), "https://restapi.amap.com/v3/weather/weatherInfo?city=%s&key=%s", 
                     encoded_city, config->api_key);
-            weather_info = parse_gaode(weather_http_request(url));
+            response = weather_http_request(url);
+            if (response) {
+                weather_info = parse_gaode(response);
+                free(response); // 解析完成后释放响应内存
+            }
             break;
         
                 
@@ -375,7 +380,11 @@ weather_info_t* weather_get(weather_config_t *config) {
             url_encode(encoded_city, location_info->city, sizeof(encoded_city));
             snprintf(url, sizeof(url), "https://api.seniverse.com/v3/weather/now.json?key=%s&location=%s&language=zh-Hans&unit=c", 
                     config->api_key, encoded_city);
-            weather_info = parse_xinzhi(weather_http_request(url));
+            response = weather_http_request(url);
+            if (response) {
+                weather_info = parse_xinzhi(response);
+                free(response);
+            }
             break;
         
                 
@@ -393,7 +402,11 @@ weather_info_t* weather_get(weather_config_t *config) {
             
             snprintf(url, sizeof(url), "https://%s/v7/weather/now?location=%s&key=%s", 
                     config->api_host, location_id, config->api_key);
-            weather_info = parse_hefeng(weather_http_request(url));
+            response = weather_http_request(url);
+            if (response) {
+                weather_info = parse_hefeng(response);
+                free(response);
+            }
             
             free(location_id);
             break;

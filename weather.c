@@ -474,6 +474,26 @@ void weather_print_info(const weather_info_t *info) {
     if (info->dew_point != 0.0f) snprintf(dew_str, sizeof(dew_str), "%.1f℃", info->dew_point);
 
     printf("┌───────────────────────────────────────┐\n");
+    bool is_empty =
+        (!info->weather || strlen(info->weather) == 0) &&
+        info->temperature == 0.0f &&
+        info->feels_like == 0.0f &&
+        info->humidity == 0.0f &&
+        (!info->wind_dir || strlen(info->wind_dir) == 0) &&
+        (!info->wind_scale || strlen(info->wind_scale) == 0) &&
+        info->wind_speed == 0.0f &&
+        info->precip == 0.0f &&
+        info->pressure == 0.0f &&
+        info->visibility == 0.0f &&
+        info->cloud == 0.0f &&
+        info->dew_point == 0.0f;
+
+    if (is_empty)
+    {
+        printf("│ ⚠️ 未获取到有效的天气数据             │\n");
+        goto end;
+    }
+
     if (info->weather) printf("│ %s  天气: %-29s │\n", weather_icon, info->weather);
     if (info->temperature != 0.0f) printf("│ 🌡️  温度: %-30s │\n", temp_str);
     if (info->feels_like != 0.0f) printf("│ 🤒 体感: %-30s │\n", feels_str);
@@ -486,7 +506,9 @@ void weather_print_info(const weather_info_t *info) {
     if (info->visibility != 0.0f) printf("│ 👁️  能见度: %-26s │\n", vis_str);
     if (info->cloud != 0.0f) printf("│ ☁️  云量: %-28s │\n", cloud_str);
     if (info->dew_point != 0.0f) printf("│ 💦 露点: %-30s │\n", dew_str);
-    printf("└───────────────────────────────────────┘\n");
+
+end:
+        printf("└───────────────────────────────────────┘\n");
 
     if (info->update_time) printf("\n🕒 更新时间: %s\n", info->update_time);
     printf("\n");

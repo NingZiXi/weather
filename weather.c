@@ -116,12 +116,9 @@ static char* weather_http_request(const char *url) {
 
     esp_http_client_handle_t client = esp_http_client_init(&config);
 
-
     weather_len = 0;
     memset(weather_buffer, 0, sizeof(weather_buffer));
-
     memset(content_encoding_value, 0, sizeof(content_encoding_value));
-
 
     esp_err_t err = esp_http_client_perform(client);    // 执行HTTP请求
     if (err != ESP_OK) {

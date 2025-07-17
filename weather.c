@@ -40,7 +40,7 @@ static void url_encode(char *dest, const char *src, size_t max_len) {
 static esp_err_t weather_http_handler(esp_http_client_event_t *evt) {
     switch(evt->event_id) {
         case HTTP_EVENT_ON_HEADER:
-            ESP_LOGI(TAG, "HTTP_EVENT_ON_HEADER, key=%s, value=%s", evt->header_key, evt->header_value);
+            // ESP_LOGI(TAG, "HTTP_EVENT_ON_HEADER, key=%s, value=%s", evt->header_key, evt->header_value);
             // 存储Content-Encoding头
             if (strcasecmp(evt->header_key, "Content-Encoding") == 0) {
                 strlcpy(content_encoding_value, evt->header_value, sizeof(content_encoding_value));
@@ -119,7 +119,9 @@ static char* weather_http_request(const char *url) {
 
     weather_len = 0;
     memset(weather_buffer, 0, sizeof(weather_buffer));
+
     memset(content_encoding_value, 0, sizeof(content_encoding_value));
+
 
     esp_err_t err = esp_http_client_perform(client);    // 执行HTTP请求
     if (err != ESP_OK) {

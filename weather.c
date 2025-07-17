@@ -13,11 +13,11 @@ static const char *TAG = "WEATHER";
 #define SAFE_FREE(ptr) do { if (ptr) { free(ptr); ptr = NULL; } } while(0)
 
 // 内部使用的缓冲区
-static char weather_buffer[2048];   
+static char weather_buffer[2048];
 static size_t weather_len = 0;
 
 // 用于存储 Content-Encoding 头部值
-static char content_encoding_value[32] = {0}; 
+static char content_encoding_value[32] = {0};
 
 // URL编码函数
 static void url_encode(char *dest, const char *src, size_t max_len) {
@@ -116,10 +116,12 @@ static char* weather_http_request(const char *url) {
 
     esp_http_client_handle_t client = esp_http_client_init(&config);
 
-    
+
     weather_len = 0;
     memset(weather_buffer, 0, sizeof(weather_buffer));
-    memset(content_encoding_value, 0, sizeof(content_encoding_value));  // 清空编码信息
+
+    memset(content_encoding_value, 0, sizeof(content_encoding_value));
+
 
     esp_err_t err = esp_http_client_perform(client);    // 执行HTTP请求
     if (err != ESP_OK) {
@@ -154,16 +156,16 @@ location_info_t* get_city_by_ip(const char *ip) {
     char url[128];
     // 使用ip-api.com的API
     snprintf(url, sizeof(url), "http://ip-api.com/json/%s?lang=zh-CN", ip ? ip : "");
-    
+
     char *response = weather_http_request(url);
     if (!response) return NULL;
-    
+
     cJSON *root = cJSON_Parse(response);
     if (!root) {
         free(response);
         return NULL;
     }
-    
+
     location_info_t *loc_info = calloc(1, sizeof(location_info_t));
     if (!loc_info) {
         cJSON_Delete(root);
@@ -179,14 +181,14 @@ location_info_t* get_city_by_ip(const char *ip) {
         cJSON *city = cJSON_GetObjectItem(root, "city");
         cJSON *isp = cJSON_GetObjectItem(root, "isp");
         cJSON *query = cJSON_GetObjectItem(root, "query");
-        
-        if (regionName && cJSON_IsString(regionName)) 
+
+        if (regionName && cJSON_IsString(regionName))
             loc_info->province = strdup(regionName->valuestring);
-        if (city && cJSON_IsString(city)) 
+        if (city && cJSON_IsString(city))
             loc_info->city = strdup(city->valuestring);
-        if (isp && cJSON_IsString(isp)) 
+        if (isp && cJSON_IsString(isp))
             loc_info->isp = strdup(isp->valuestring);
-        if (query && cJSON_IsString(query)) 
+        if (query && cJSON_IsString(query))
             loc_info->ip_address = strdup(query->valuestring);
     }
 
@@ -199,13 +201,13 @@ location_info_t* get_city_by_ip(const char *ip) {
 static weather_info_t* parse_gaode(const char *json) {
     cJSON *root = cJSON_Parse(json);
     if (!root) return NULL;
-    
+
     weather_info_t *info = calloc(1, sizeof(weather_info_t));
     if (!info) {
         cJSON_Delete(root);
         return NULL;
     }
-    
+
     cJSON *lives = cJSON_GetObjectItem(root, "lives");
     if (lives && cJSON_IsArray(lives)) {
         cJSON *item = cJSON_GetArrayItem(lives, 0);
@@ -218,7 +220,7 @@ static weather_info_t* parse_gaode(const char *json) {
             info->update_time = strdup(cJSON_GetObjectItem(item, "reporttime")->valuestring);
         }
     }
-    
+
     cJSON_Delete(root);
     return info;
 }
@@ -227,13 +229,13 @@ static weather_info_t* parse_gaode(const char *json) {
 static weather_info_t* parse_xinzhi(const char *json) {
     cJSON *root = cJSON_Parse(json);
     if (!root) return NULL;
-    
+
     weather_info_t *info = calloc(1, sizeof(weather_info_t));
     if (!info) {
         cJSON_Delete(root);
         return NULL;
     }
-    
+
     cJSON *results = cJSON_GetObjectItem(root, "results");
     if (results && cJSON_IsArray(results)) {
         cJSON *item = cJSON_GetArrayItem(results, 0);
@@ -252,7 +254,7 @@ static weather_info_t* parse_xinzhi(const char *json) {
             }
         }
     }
-    
+
     cJSON_Delete(root);
     return info;
 }
@@ -262,8 +264,8 @@ static char* get_hefeng_location_id(const char *city_name, const char *api_host,
     char url[256];
     char encoded_city[64] = {0};
     url_encode(encoded_city, city_name, sizeof(encoded_city));
-    
-    snprintf(url, sizeof(url), "https://%s/geo/v2/city/lookup?key=%s&location=%s&number=1", 
+
+    snprintf(url, sizeof(url), "https://%s/geo/v2/city/lookup?key=%s&location=%s&number=1",
             api_host, api_key, encoded_city);
 
     char *response = weather_http_request(url);
@@ -297,13 +299,13 @@ static char* get_hefeng_location_id(const char *city_name, const char *api_host,
 static weather_info_t* parse_hefeng(const char *json) {
     cJSON *root = cJSON_Parse(json);
     if (!root) return NULL;
-    
+
     weather_info_t *info = calloc(1, sizeof(weather_info_t));
     if (!info) {
         cJSON_Delete(root);
         return NULL;
     }
-    
+
     cJSON *now = cJSON_GetObjectItem(root, "now");
     if (now) {
         // 基本天气信息
@@ -311,23 +313,23 @@ static weather_info_t* parse_hefeng(const char *json) {
         info->temperature = atof(cJSON_GetObjectItem(now, "temp")->valuestring);
         info->feels_like = atof(cJSON_GetObjectItem(now, "feelsLike")->valuestring);
         info->humidity = atof(cJSON_GetObjectItem(now, "humidity")->valuestring);
-        
+
         // 风信息
         info->wind_dir = strdup(cJSON_GetObjectItem(now, "windDir")->valuestring);
         info->wind_scale = strdup(cJSON_GetObjectItem(now, "windScale")->valuestring);
         info->wind_speed = atof(cJSON_GetObjectItem(now, "windSpeed")->valuestring);
-        
+
         // 其他气象数据
         info->precip = atof(cJSON_GetObjectItem(now, "precip")->valuestring);
         info->pressure = atof(cJSON_GetObjectItem(now, "pressure")->valuestring);
         info->visibility = atof(cJSON_GetObjectItem(now, "vis")->valuestring);
         info->cloud = atof(cJSON_GetObjectItem(now, "cloud")->valuestring);
         info->dew_point = atof(cJSON_GetObjectItem(now, "dew")->valuestring);
-        
+
         // 更新时间
         info->update_time = strdup(cJSON_GetObjectItem(root, "updateTime")->valuestring);
     }
-    
+
     cJSON_Delete(root);
     return info;
 }
@@ -339,12 +341,12 @@ weather_info_t* weather_get(weather_config_t *config) {
     if (config->city && strlen(config->city) > 0) {
         location_info = calloc(1, sizeof(location_info_t));
         location_info->city = strdup(config->city);
-    } 
+    }
     // 否则自动获取位置
     else {
         // 通过IP获取城市信息
         location_info = get_city_by_ip(NULL);
-        
+
         if (!location_info) {
             ESP_LOGE(TAG, "Failed to get city by IP");
             return NULL;
@@ -363,7 +365,7 @@ weather_info_t* weather_get(weather_config_t *config) {
                 return NULL;
             }
             url_encode(encoded_city, location_info->city, sizeof(encoded_city));
-            snprintf(url, sizeof(url), "https://restapi.amap.com/v3/weather/weatherInfo?city=%s&key=%s", 
+            snprintf(url, sizeof(url), "https://restapi.amap.com/v3/weather/weatherInfo?city=%s&key=%s",
                     encoded_city, config->api_key);
             response = weather_http_request(url);
             if (response) {
@@ -371,15 +373,15 @@ weather_info_t* weather_get(weather_config_t *config) {
                 free(response); // 解析完成后释放响应内存
             }
             break;
-        
-                
-        case WEATHER_XINZHI: 
+
+
+        case WEATHER_XINZHI:
             if(!config->api_key){
                 ESP_LOGE(TAG, "XINZHI API key is not configured");
                 return NULL;
             }
             url_encode(encoded_city, location_info->city, sizeof(encoded_city));
-            snprintf(url, sizeof(url), "https://api.seniverse.com/v3/weather/now.json?key=%s&location=%s&language=zh-Hans&unit=c", 
+            snprintf(url, sizeof(url), "https://api.seniverse.com/v3/weather/now.json?key=%s&location=%s&language=zh-Hans&unit=c",
                     config->api_key, encoded_city);
             response = weather_http_request(url);
             if (response) {
@@ -387,8 +389,8 @@ weather_info_t* weather_get(weather_config_t *config) {
                 free(response);
             }
             break;
-        
-                
+
+
         case WEATHER_HEFENG:
             if (!config->api_host || !config->api_key) {
                 ESP_LOGE(TAG, "HEFENG API host or key is not configured");
@@ -400,18 +402,18 @@ weather_info_t* weather_get(weather_config_t *config) {
                 location_info_free(location_info);
                 return NULL;
             }
-            
-            snprintf(url, sizeof(url), "https://%s/v7/weather/now?location=%s&key=%s", 
+
+            snprintf(url, sizeof(url), "https://%s/v7/weather/now?location=%s&key=%s",
                     config->api_host, location_id, config->api_key);
             response = weather_http_request(url);
             if (response) {
                 weather_info = parse_hefeng(response);
                 free(response);
             }
-            
+
             free(location_id);
             break;
-            
+
         default:
             break;
     }
@@ -423,7 +425,7 @@ weather_info_t* weather_get(weather_config_t *config) {
 
 void weather_print_info(const weather_info_t *info) {
     if (!info) return;
-    
+
     // 天气符号映射
     const char* weather_icon = "☁️";
     if (info->weather) {
@@ -445,24 +447,24 @@ void weather_print_info(const weather_info_t *info) {
     if (info->location_info) {
         char city[64] = {0};
         if (info->location_info->province && info->location_info->city) {
-            snprintf(city, sizeof(city), "%s·%s", 
-                    info->location_info->province, 
+            snprintf(city, sizeof(city), "%s·%s",
+                    info->location_info->province,
                     info->location_info->city);
         } else if (info->location_info->province) {
-            snprintf(city, sizeof(city), "%s", 
+            snprintf(city, sizeof(city), "%s",
                     info->location_info->province);
         } else if (info->location_info->city) {
-            snprintf(city, sizeof(city), "%s", 
+            snprintf(city, sizeof(city), "%s",
                     info->location_info->city);
         }
         printf("📍 位置: %s\n", city);
     }
-    
+
     // 预格式化带单位的数据
     char temp_str[16] = "", feels_str[16] = "", humidity_str[16] = "";
     char precip_str[16] = "", pressure_str[16] = "", vis_str[16] = "";
     char cloud_str[16] = "", dew_str[16] = "", wspeed_str[16] = "";
-    
+
     if (info->temperature != 0.0f) snprintf(temp_str, sizeof(temp_str), "%.1f℃", info->temperature);
     if (info->feels_like != 0.0f) snprintf(feels_str, sizeof(feels_str), "%.1f℃", info->feels_like);
     if (info->humidity != 0.0f) snprintf(humidity_str, sizeof(humidity_str), "%.1f%%", info->humidity);
@@ -474,6 +476,26 @@ void weather_print_info(const weather_info_t *info) {
     if (info->dew_point != 0.0f) snprintf(dew_str, sizeof(dew_str), "%.1f℃", info->dew_point);
 
     printf("┌───────────────────────────────────────┐\n");
+    bool is_empty =
+        (!info->weather || strlen(info->weather) == 0) &&
+        info->temperature == 0.0f &&
+        info->feels_like == 0.0f &&
+        info->humidity == 0.0f &&
+        (!info->wind_dir || strlen(info->wind_dir) == 0) &&
+        (!info->wind_scale || strlen(info->wind_scale) == 0) &&
+        info->wind_speed == 0.0f &&
+        info->precip == 0.0f &&
+        info->pressure == 0.0f &&
+        info->visibility == 0.0f &&
+        info->cloud == 0.0f &&
+        info->dew_point == 0.0f;
+
+    if (is_empty)
+    {
+        printf("│ ⚠️ 未获取到有效的天气数据             │\n");
+        goto end;
+    }
+
     if (info->weather) printf("│ %s  天气: %-29s │\n", weather_icon, info->weather);
     if (info->temperature != 0.0f) printf("│ 🌡️  温度: %-30s │\n", temp_str);
     if (info->feels_like != 0.0f) printf("│ 🤒 体感: %-30s │\n", feels_str);
@@ -486,15 +508,17 @@ void weather_print_info(const weather_info_t *info) {
     if (info->visibility != 0.0f) printf("│ 👁️  能见度: %-26s │\n", vis_str);
     if (info->cloud != 0.0f) printf("│ ☁️  云量: %-28s │\n", cloud_str);
     if (info->dew_point != 0.0f) printf("│ 💦 露点: %-30s │\n", dew_str);
-    printf("└───────────────────────────────────────┘\n");
-    
+
+end:
+        printf("└───────────────────────────────────────┘\n");
+
     if (info->update_time) printf("\n🕒 更新时间: %s\n", info->update_time);
     printf("\n");
 }
 
 void location_info_free(location_info_t *location_info) {
     if (!location_info) return;
-    
+
     SAFE_FREE(location_info->ip_address);
     SAFE_FREE(location_info->province);
     SAFE_FREE(location_info->city);
@@ -504,13 +528,13 @@ void location_info_free(location_info_t *location_info) {
 
 void weather_info_free(weather_info_t *info) {
     if (!info) return;
-    
+
     // 释放天气信息
     SAFE_FREE(info->weather);
     SAFE_FREE(info->wind_dir);
     SAFE_FREE(info->wind_scale);
     SAFE_FREE(info->update_time);
-    
+
     // 释放位置信息
     if (info->location_info) {
         location_info_free(info->location_info);
